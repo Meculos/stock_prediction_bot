@@ -3,14 +3,19 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status, generics
-from .models import User, Prediction
+from .models import User, Prediction, UserProfile
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate, login, logout
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
 
 from .utils import predict_stock_price
 from .serializers import PredictionSerializer
 from django.conf import settings
+
+import stripe
 
 # Create your views here.
 class RegisterApiView(APIView):
@@ -92,3 +97,71 @@ class ListPredictionsView(generics.ListAPIView):
             queryset = queryset.filter(created_at__date=date)
 
         return queryset.order_by('-created_at')
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+class CreateCheckoutSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        # Ensure Stripe customer exists
+        if not user.userprofile.stripe_customer_id:
+            customer = stripe.Customer.create(email=user.email)
+            user.userprofile.stripe_customer_id = customer.id
+            user.userprofile.save()
+
+        # Create Stripe Checkout Session
+        session = stripe.checkout.Session.create(
+            customer=user.userprofile.stripe_customer_id,
+            payment_method_types=["card"],
+            line_items=[{
+                'price_data': {
+                    'currency': 'inr',
+                    'unit_amount': 19900,
+                    'recurring': {'interval': 'month'},
+                    'product_data': {'name': 'Pro Membership'},
+                },
+                'quantity': 1,
+            }],
+            mode="subscription",
+            success_url="http://localhost:8000/success/",
+            cancel_url="http://localhost:8000/cancel/",
+        )
+
+        return Response({"session_id": session.id})
+    
+@method_decorator(csrf_exempt, name='dispatch')
+class StripeWebhookView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        payload = request.body
+        sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
+        webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload=payload,
+                sig_header=sig_header,
+                secret=webhook_secret
+            )
+        except ValueError:
+            return HttpResponse(status=400)
+        except stripe.error.SignatureVerificationError:
+            return HttpResponse(status=400)
+
+        # Handle events
+        if event["type"] == "checkout.session.completed":
+            session = event["data"]["object"]
+            customer_id = session.get("customer")
+            if customer_id:
+                UserProfile.objects.filter(stripe_customer_id=customer_id).update(is_pro=True)
+
+        elif event["type"] == "customer.subscription.deleted":
+            customer_id = event["data"]["object"].get("customer")
+            if customer_id:
+                UserProfile.objects.filter(stripe_customer_id=customer_id).update(is_pro=False)
+
+        return HttpResponse(status=200)
