@@ -9,7 +9,7 @@ import uuid
 
 from django.conf import settings
 
-def predict_stock_price(ticker):
+async def predict_stock_price(ticker):
     model_path = settings.MODEL_PATH
     model = load_model(model_path)
 
