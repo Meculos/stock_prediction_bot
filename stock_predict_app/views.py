@@ -1,12 +1,14 @@
 from django.shortcuts import render
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.reverse import reverse
 from rest_framework.views import APIView
 from rest_framework import status, generics
 from .models import User, Prediction, UserProfile
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
@@ -47,7 +49,19 @@ class RegisterApiView(APIView):
         
         return Response({
             "message": "User successfully created",
+            "login_page": request.build_absolute_uri(reverse('login'))
         }, status=status.HTTP_201_CREATED)
+    
+class LoginApiView(APIView):
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+            return Response({"message": "Login successful", "dashboard": request.build_absolute_uri(reverse('dashboard'))}, status=status.HTTP_200_OK)
+        return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 class PredictView(APIView):
     permission_classes = [IsAuthenticated]
@@ -165,3 +179,17 @@ class StripeWebhookView(APIView):
                 UserProfile.objects.filter(stripe_customer_id=customer_id).update(is_pro=False)
 
         return HttpResponse(status=200)
+    
+def login_page(request):
+    return render(request, "stock_predict_app/login.html")
+
+def register_page(request):
+    return render(request, "stock_predict_app/register.html")
+
+@login_required
+def dashboard(request):
+    predictions = Prediction.objects.filter(user=request.user).order_by("-created_at")
+
+    return render(request, "stock_predict_app/dashboard.html", {
+        "predictions": predictions
+    })

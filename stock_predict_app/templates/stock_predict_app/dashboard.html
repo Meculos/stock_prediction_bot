@@ -1,0 +1,81 @@
+{% extends "stock_predict_app/layout.html" %}
+{% load static %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+    <header class="flex justify-between items-center px-6 py-4 bg-white shadow-md">
+        <div>
+            {% if request.user.is_authenticated %}
+                <span class="text-lg font-semibold">Hi, {{ request.user.username }}</span>
+            {% else %}
+                <a href="{% url 'login' %}" class="text-blue-500 hover:underline mr-4">Login</a>
+                <a href="{% url 'register' %}" class="text-blue-500 hover:underline">Register</a>
+            {% endif %}
+        </div>
+
+        {% if request.user.is_authenticated %}
+            {% if request.user.userprofile.is_pro %}
+                <span class="bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full">✅ You are on a Pro account</span>
+            {% else %}
+                <a href="{% url 'create-checkout-session' %}" class="bg-yellow-100 text-yellow-800 text-sm px-3 py-1 rounded-full hover:bg-yellow-200">
+                    ⚠️ Upgrade to Pro
+                </a>
+            {% endif %}
+        {% endif %}
+    </header>
+
+    <main class="max-w-3xl mx-auto mt-10">
+        <section class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-4">Predict Stock Price</h2>
+
+            <form id="predictForm" class="flex gap-4 items-center mb-6">
+                <input type="text" id="ticker" name="ticker" placeholder="Enter Ticker (e.g. AAPL)"
+                       class="flex-1 border border-gray-300 px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <button type="submit"
+                        class="bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700">
+                    Predict
+                </button>
+            </form>
+
+            <div id="predictionResult" class="mb-6"></div>
+
+            <hr class="my-6">
+
+            <h3 class="text-xl font-semibold mb-3">Your Past Predictions</h3>
+
+            <div class="overflow-x-auto">
+                <table class="w-full table-auto border-collapse">
+                    <thead>
+                        <tr class="bg-gray-200 text-left text-sm">
+                            <th class="px-4 py-2">Ticker</th>
+                            <th class="px-4 py-2">Price</th>
+                            <th class="px-4 py-2">MSE</th>
+                            <th class="px-4 py-2">RMSE</th>
+                            <th class="px-4 py-2">R²</th>
+                            <th class="px-4 py-2">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prediction in predictions %}
+                            <tr class="border-b text-sm">
+                                <td class="px-4 py-2">{{ prediction.ticker }}</td>
+                                <td class="px-4 py-2">{{ prediction.predicted_price }}</td>
+                                <td class="px-4 py-2">{{ prediction.mse }}</td>
+                                <td class="px-4 py-2">{{ prediction.rmse }}</td>
+                                <td class="px-4 py-2">{{ prediction.r2 }}</td>
+                                <td class="px-4 py-2">{{ prediction.created_at|date:"Y-m-d H:i" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6" class="text-center py-4 text-gray-500">No predictions yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+{% endblock %}
+
+{% block script %}
+    <script src="{% static 'stock_predict_app/dashboard.js' %}"></script>
+{% endblock %}
