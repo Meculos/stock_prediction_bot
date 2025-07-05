@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -86,8 +87,8 @@ DATABASES = {
         'NAME': os.getenv("DB_NAME"),
         'USER': os.getenv("DB_USER"),
         'PASSWORD': os.getenv("DB_PASSWORD"),
-        'HOST': os.getenv("DB_HOST"),
-        'PORT': os.getenv("DB_PORT"),
+        'HOST': os.getenv('DB_HOST', 'db'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 
@@ -171,8 +172,20 @@ MODEL_PATH = os.getenv("MODEL_PATH", "stock_prediction_model.keras")
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# Static files
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 LOGIN_URL = '/login/'
+
+SECURE_SSL_REDIRECT= os.getenv('SECURE_SSL_REDIRECT')
+
+SESSION_COOKIE_SECURE= os.getenv('SESSION_COOKIE_SECURE')
+
+CSRF_COOKIE_SECURE= os.getenv('CSRF_COOKIE_SECURE')

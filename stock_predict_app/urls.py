@@ -18,6 +18,7 @@ urlpatterns = [
     path('register/', views.register_page, name='register'),
     path('login/', views.login_page, name='login'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path("healthz/", views.health_check, name="health_check"),
 
     # JWT urls
     path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

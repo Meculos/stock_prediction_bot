@@ -11,7 +11,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 from .utils import predict_stock_price
 from .serializers import PredictionSerializer
@@ -193,3 +193,6 @@ def dashboard(request):
     return render(request, "stock_predict_app/dashboard.html", {
         "predictions": predictions
     })
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})

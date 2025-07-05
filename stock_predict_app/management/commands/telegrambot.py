@@ -1,12 +1,13 @@
 import os
 import django
 from telegram import Update
+from django.core.management.base import BaseCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 from asgiref.sync import sync_to_async
-from datetime import timezone
+from django.utils import timezone
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'intern_project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'stock_predict.settings')
 django.setup()
 
 load_dotenv()
@@ -38,10 +39,17 @@ def get_user_by_chat_id(chat_id):
 def get_latest_prediction(user):
     return Prediction.objects.filter(user=user).order_by("-created_at").first()
 
+@sync_to_async
+def is_user_pro(user):
+    return user.userprofile.is_pro
+
+@sync_to_async
+def get_daily_prediction_count(user, date):
+    return Prediction.objects.filter(user=user, created_at__date=date).count()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    args = context.args  # everything after /start
+    args = context.args
     
     if not args:
         await update.message.reply_text(
@@ -50,7 +58,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     username = args[0]
-    success, message = await link_telegram_user(username, chat_id)
+    success, message = await link_telegram_user(chat_id, username)
 
     await update.message.reply_text(message)
 
@@ -68,6 +76,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = await get_user_by_chat_id(chat_id)
+    print(user.username)
 
     if not user:
         await update.message.reply_text("You need to link your account first using /start.")
@@ -77,9 +86,9 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /predict <TICKER>")
         return
     
-    if not user.userprofile.is_pro:
+    if not await is_user_pro(user):
         today = timezone.now().date()
-        count = Prediction.objects.filter(user=user, created_at__date=today).count()
+        count = await get_daily_prediction_count(user, today)
         if count >= 5:
             await update.message.reply_text(
                 "⛔ Free users can only make 5 predictions per day.\nUpgrade to Pro: /subscribe"
@@ -88,7 +97,7 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ticker = context.args[0].upper()
     try:
-        prediction = await predict_stock_price(ticker)
+        prediction = await sync_to_async(predict_stock_price)(ticker)
         msg = f"{ticker} Prediction:\nPrice: {prediction.predicted_price}\nMSE: {prediction.mse}\nRMSE: {prediction.rmse}\nR²: {prediction.r2}"
         await update.message.reply_text(msg)
         await context.bot.send_photo(chat_id=chat_id, photo=open(prediction.plot_history.path, 'rb'))
@@ -132,15 +141,15 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-def run_bot():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("predict", predict))
-    app.add_handler(CommandHandler("latest", latest))
-    app.add_handler(CommandHandler("subscribe", subscribe))
-    app.run_polling()
+class Command(BaseCommand):
+    help = "Run Telegram bot with long polling"
 
-
-if __name__ == "__main__":
-    run_bot()
+    def handle(self, *args, **kwargs):
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("help", help_command))
+        app.add_handler(CommandHandler("predict", predict))
+        app.add_handler(CommandHandler("latest", latest))
+        app.add_handler(CommandHandler("subscribe", subscribe))
+        self.stdout.write("Telegram bot running...")
+        app.run_polling()
